@@ -1,0 +1,57 @@
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use tauri::{api::path::app_cache_dir, utils::config};
+
+const SOURCE: &str = "https://api.github.com/repos/zxbc/BAR_widgets/git/trees/main?recursive=1";
+
+#[derive(Debug, Deserialize, Serialize)]
+struct GithubPayload {
+    sha: String,
+    url: String,
+    tree: Vec<GithubFile>,
+    truncated: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct GithubFile {
+    path: String,
+    mode: String,
+    #[serde(rename = "type")]
+    item_type: String,
+    sha: String,
+    size: usize,
+    url: String,
+}
+
+struct Store;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cache_dir = tauri::api::path::cache_dir()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
+    println!("{cache_dir}");
+
+    // let client = reqwest::ClientBuilder::new()
+    //     .user_agent("BAR Widget Manager")
+    //     .build()
+    //     .context("Failed to build reqwest client")?;
+
+    // let response = client
+    //     .get(SOURCE)
+    //     .send()
+    //     .await
+    //     .context("Failed to send GET request")?;
+
+    // let payload: GithubPayload = response.json().await?;
+
+    // println!("{:#?}", payload);
+
+    // let payload_json = serde_json::to_string_pretty(&payload)?;
+
+    // println!("{}", payload_json);
+
+    Ok(())
+}
