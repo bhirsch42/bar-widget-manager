@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
 import "./App.css";
 import { invoke } from "@tauri-apps/api";
 
 type Widget = {
-  fileName: string;
-  text: string;
-  isInstalled: string;
+  filename: string;
+  body: string;
 };
 
 function useWidgetList(): { widgets: Widget[]; isLoading: boolean } {
@@ -20,7 +17,7 @@ function useWidgetList(): { widgets: Widget[]; isLoading: boolean } {
       console.log("AAAAH", responseWidgets);
       setWidgets(responseWidgets);
     });
-  });
+  }, []);
 
   return { widgets, isLoading };
 }
@@ -31,8 +28,9 @@ function App() {
   return (
     <div>
       {widgets.map((widget) => (
-        <div key={widget.fileName}>
-          <div>{widget.fileName}</div>
+        <div key={widget.filename}>
+          <div>{widget.filename}</div>
+          <pre>{widget.body}</pre>
         </div>
       ))}
     </div>

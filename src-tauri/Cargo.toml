@@ -21,6 +21,9 @@ tauri = { version = "1.4.0", features = ["dialog-all"] }
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0.71"
+futures = "0.3.28"
+base64 = "0.21.2"
+regex = "1.8.4"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
