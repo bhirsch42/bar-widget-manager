@@ -6,7 +6,7 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
 use futures::future::join_all;
-use mlua::Lua;
+
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -15,7 +15,10 @@ use tokio::{
     sync::Mutex,
 };
 
-use crate::utils::remove_whitespace;
+use crate::{
+    utils::{get_or_create_file, remove_whitespace},
+    widget::Widget,
+};
 
 const SOURCE: &str = "https://api.github.com/repos/zxbc/BAR_widgets/git/trees/main?recursive=1";
 
@@ -25,17 +28,6 @@ pub struct GithubWidgetSource {
     is_response_cache_loaded: bool,
     client: Client,
 }
-
-async fn get_or_create_file(path: &PathBuf) -> Result<File> {
-    if (File::open(path).await).is_err() {
-        let mut file = File::create(path).await?;
-        file.write_all(b"{}").await?;
-        file.flush().await?;
-    }
-
-    Ok(File::open(path).await?)
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 struct GithubDirectory {
     sha: String,
@@ -63,13 +55,6 @@ struct GithubBlob {
     size: i32,
     content: String,
     encoding: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Widget {
-    filename: String,
-    body: String,
-    info: Option<WidgetInfo>,
 }
 
 impl GithubWidgetSource {
@@ -130,10 +115,8 @@ impl GithubWidgetSource {
 
     async fn fetch(&mut self, url: &str) -> Result<String> {
         let response = if let Some(cache_result) = self.response_cache.get(url) {
-            println!("fetch (cached): {:?}", url);
             cache_result.clone()
         } else {
-            println!("fetch: {:?}", url);
             let response: reqwest::Response = self.client.get(url).send().await?;
             let response_content = response.text().await?;
             self.response_cache
@@ -165,17 +148,10 @@ impl GithubWidgetSource {
                 .map(|github_file| async {
                     let response = source_mutex.lock().await.fetch(&github_file.url).await?;
                     let response: GithubBlob = serde_json::from_str(&response)?;
-
                     let lua_code =
                         decode_base64(&response.content).context("Error decoding base64")?;
 
-                    let info = get_widget_properties_from_lua_code(&lua_code);
-
-                    Ok::<Widget, anyhow::Error>(Widget {
-                        filename: github_file.path.clone(),
-                        body: lua_code,
-                        info,
-                    })
+                    Ok::<Widget, anyhow::Error>(Widget::new(&github_file.path, &lua_code))
                 }),
         )
         .await;
@@ -200,61 +176,4 @@ fn decode_base64(encoded_str: &str) -> Result<String> {
     let decoded_bytes =
         base64::engine::general_purpose::STANDARD.decode(remove_whitespace(encoded_str))?;
     Ok(String::from_utf8(decoded_bytes).expect("Invalid UTF-8"))
-}
-
-fn extract_widget_info_lua_fn(lua_code: &str) -> Result<String> {
-    let lines: Vec<&str> = lua_code.split('\n').collect();
-
-    let start_index = lines
-        .iter()
-        .position(|line| *line == "function widget:GetInfo()")
-        .ok_or(anyhow!("Couldn't find widget:GetInfo()"))?;
-
-    let end_index = lines[start_index..]
-        .iter()
-        .position(|line| *line == "end")
-        .ok_or(anyhow!("Couldn't find end of widget:GetInfo()"))?;
-
-    let widget_info_def = lines[start_index..(end_index + 1)].join("\n");
-
-    Ok(widget_info_def)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct WidgetInfo {
-    name: Option<String>,
-    description: Option<String>,
-    author: Option<String>,
-    date: Option<String>,
-    version: Option<String>,
-}
-
-fn get_widget_info_attribute(lua: &Lua, attribute_name: &str) -> Option<String> {
-    let code = format!(r#"widget:GetInfo()["{}"]"#, attribute_name);
-    lua.load(&code).eval::<String>().ok()
-}
-
-fn get_widget_properties_from_lua_code(lua_code: &str) -> Option<WidgetInfo> {
-    let widget_info_fn_code = extract_widget_info_lua_fn(lua_code).ok()?;
-
-    println!("{}", widget_info_fn_code);
-
-    let lua = Lua::new();
-    let globals = lua.globals();
-
-    let empty_table = lua.create_table().ok()?;
-    globals.set("widget", empty_table).ok()?;
-    lua.load(&widget_info_fn_code).exec().ok()?;
-
-    let widget_info = WidgetInfo {
-        name: get_widget_info_attribute(&lua, "name"),
-        description: get_widget_info_attribute(&lua, "desc"),
-        author: get_widget_info_attribute(&lua, "author"),
-        date: get_widget_info_attribute(&lua, "date"),
-        version: get_widget_info_attribute(&lua, "version"),
-    };
-
-    println!("{:#?}", widget_info);
-
-    Some(widget_info)
 }

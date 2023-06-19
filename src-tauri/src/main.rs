@@ -11,11 +11,11 @@ use tokio::{
     fs::{create_dir, metadata},
     sync::Mutex,
 };
-
-use crate::github_widget_source::Widget;
+use widget::Widget;
 
 mod github_widget_source;
 mod utils;
+mod widget;
 
 async fn create_github_widget_source(app_cache_folder_name: &str) -> Result<GithubWidgetSource> {
     let cache_dir = cache_dir().ok_or(anyhow::Error::msg("Error getting cache dir"))?;
